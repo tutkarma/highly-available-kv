@@ -1,5 +1,5 @@
 class Message:
-    def __init__(self, from_node, to_node, msg_id=None):
+    def __init__(self, from_node: 'DynamoNode', to_node: 'DynamoNode', msg_id=None):
         self.from_node = from_node
         self.to_node = to_node
         self.msg_id = msg_id

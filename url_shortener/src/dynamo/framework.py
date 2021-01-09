@@ -32,3 +32,45 @@ class Framework:
         fwd_msg.to_node = new_to_node
         cls.queue.append(fwd_msg)
 
+    @classmethod
+    def remove_req_timer(cls, reqmsg):
+        if reqmsg in cls.pending_timers:
+            TimerManager.cancel_timer(cls.pending_timers[reqmsg])
+            del cls.pending_timers[reqmsg]
+
+    @classmethod
+    def schedule(cls, msgs_to_process=None, timers_to_process=None):
+        if msgs_to_process is None:
+            msgs_to_process = 32768
+        if timers_to_process is None:
+            timers_to_process = 32768
+
+        while cls._work_to_do():
+            while cls.queue:
+                msg = cls.queue.popleft()
+                print(msg)
+                if isinstance(msg, ResponseMessage):
+                    try:
+                        reqmsg = msg.response_to.original_msg
+                    except:
+                        reqmsg = msg.response_to
+                    cls.remove_req_timer(reqmsg)
+
+                msg.to_node.rcvmsg(msg)
+            msgs_to_process -= 1
+            if msgs_to_process == 0:
+                return
+
+        if TimerManager.pending_count() > 0 and timers_to_process > 0:
+            TimerManager.pop_timer()
+            timers_to_process -= 1
+        if timers_to_process == 0:
+            return
+
+    @classmethod
+    def _work_to_do(cls):
+        if cls.queue:
+            return True
+        if TimerManager.pending_count() > 0:
+            return True
+        return False

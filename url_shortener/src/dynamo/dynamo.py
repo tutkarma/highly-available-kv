@@ -23,9 +23,9 @@ from vectorclock import VectorClock
 class DynamoNode(Node):
     time_priority = 20
     T = 10
-    N = 2
-    W = 3
-    R = 3
+    N = 3
+    W = 2
+    R = 2
     nodelist = []
     chash = HashTable(nodelist, T)
 
@@ -100,24 +100,26 @@ class DynamoNode(Node):
             Framework.send_message(msg, coordinator)
         else:
             seqno = self.generate_seq_num()
+            self.pending_req[GetReq][seqno] = set()
             self.pending_get_rsp[seqno] = set()
             self.pending_get_msg[seqno] = msg
             reqcount = 0
             for node in preference_list:
                 getmsg = GetReq(self, node, msg.key, msg_id=seqno)
+                self.pending_req[GetReq][seqno].add(getmsg)
                 Framework.send_message(getmsg)
                 reqcount += 1
                 if reqcount >= DynamoNode.N:
                     break
 
     def rcv_get(self, getmsg):
-        value, metadata = self.retrieve(germsg.key)
+        value, metadata = self.retrieve(getmsg.key)
         getrsp = GetRsp(getmsg, value, metadata)
         Framework.send_message(getrsp)
 
     def rcv_getrsp(self, getrsp):
         seqno = getrsp.msg_id
-        if seqno not in self.pending_get_rsp:
+        if seqno in self.pending_get_rsp:
             self.pending_get_rsp[seqno].add((getrsp.from_node, getrsp.value, getrsp.metadata))
             if len(self.pending_get_rsp[seqno]) >= DynamoNode.R:
                 results = set([(value, metadata) for (node, value, metadata) in self.pending_get_rsp[seqno]])
@@ -125,7 +127,7 @@ class DynamoNode(Node):
                 del self.pending_req[GetReq][seqno]
                 del self.pending_get_rsp[seqno]
                 del self.pending_get_msg[seqno]
-                client_getrsp = ClientGetRsp(original_msg,
+                client_getrsp = ClientGetRsp(orig_msg,
                                              [value for (value, metadata) in results],
                                              [metadata for (value, metadata) in results])
                 Framework.send_message(client_getrsp)
@@ -173,6 +175,26 @@ class DynamoNode(Node):
                 Framework.send_message(putmsg)
             del self.pending_handoffs[recovered_node]
 
+    def rcvmsg(self, msg):
+        if isinstance(msg, ClientPut):
+            self.rcv_clientput(msg)
+        elif isinstance(msg, PutReq):
+            self.rcv_put(msg)
+        elif isinstance(msg, PutRsp):
+            self.rcv_putrsp(msg)
+        elif isinstance(msg, ClientGet):
+            self.rcv_clientget(msg)
+        elif isinstance(msg, GetReq):
+            self.rcv_get(msg)
+        elif isinstance(msg, GetRsp):
+            self.rcv_getrsp(msg)
+        elif isinstance(msg, PingReq):
+            self.rcv_pingreq(msg)
+        elif isinstance(msg, PingRsp):
+            self.rcv_pingrsp(msg)
+        else:
+            raise TypeError(f'Unexpected message type {msg.__class__}')
+
 
 class DynamoClientNode(Node):
     timer_priority = 17
@@ -205,3 +227,5 @@ class DynamoClientNode(Node):
         elif isinstance(reqmsg, ClientGet):
             self.get(reqmsg.key)
 
+    def rcvmsg(self, msg):
+        self.last_msg = msg

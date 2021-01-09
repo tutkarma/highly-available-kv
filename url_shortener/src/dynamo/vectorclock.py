@@ -7,7 +7,7 @@ import typing as t
 
 class VectorClock:
     def __init__(self):
-        self.clock = {}
+        self.clock: t.Dict[t.Any, int] = {}
 
     def update(self, node, counter: int) -> VectorClock:
         if node in self.clock and counter <= self.clock[node]:
@@ -41,6 +41,12 @@ class VectorClock:
 
     def __ge__(self, other):
         return (self == other) or (self > other)
+
+    def __key(self):
+        return tuple(sorted(self.clock.items()))
+
+    def __hash__(self):
+        return hash(self.__key())
 
     @classmethod
     def coalesce(cls, vcs: t.List[VectorClock]) -> t.List[VectorClock]:
